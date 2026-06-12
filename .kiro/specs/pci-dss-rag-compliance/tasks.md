@@ -189,7 +189,7 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
     - _Requirements: 4.3, 4.4, 4.5_
 
 - [ ] 10. Implement Pipeline Orchestrator
-  - [ ] 10.1 Implement ingestion pipeline with observability and resumability
+  - [x] 10.1 Implement ingestion pipeline with observability and resumability
     - Create `src/pipeline/orchestrator.py` with `PipelineOrchestrator` class
     - Implement `run_ingestion()` with progress logging (total documents, per-document completion)
     - Implement `resume_ingestion()` using `IngestionCheckpoint` to skip already-processed documents
@@ -199,19 +199,19 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
     - Store checkpoint state in `data/pipeline_state.json`
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-  - [ ] 10.2 Implement health check endpoint
+  - [x] 10.2 Implement health check endpoint
     - Add GET `/api/v1/health` endpoint returning pipeline status and last successful ingestion timestamp
     - _Requirements: 9.3_
 
-  - [ ]* 10.3 Write unit tests for pipeline orchestrator
+  - [ ] 10.3 Write unit tests for pipeline orchestrator
     - Test resumption skips already-processed documents
     - Test individual failure doesn't terminate pipeline
     - Test progress logging emits correct messages
     - Test completion report contains expected metrics
     - _Requirements: 9.1, 9.2, 9.4, 9.5_
 
-- [ ] 11. Integration wiring and final assembly
-  - [ ] 11.1 Wire all components together with dependency injection
+- [x] 11. Integration wiring and final assembly
+  - [x] 11.1 Wire all components together with dependency injection
     - Create `src/config.py` for application settings (env vars, defaults)
     - Create `src/dependencies.py` for FastAPI dependency injection (instantiate services, wire store → embedding → engine)
     - Create `src/main.py` as application entry point with uvicorn startup
@@ -229,7 +229,7 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
     - Test concurrent query handling
     - _Requirements: 4.1, 4.2, 5.1, 7.4_
 
-- [ ] 12. Final checkpoint - Ensure all tests pass
+- [x] 12. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

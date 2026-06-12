@@ -6,6 +6,8 @@ Implements the POST /api/v1/compliance/query endpoint with:
 - 30-second processing timeout
 - 503 with Retry-After when RAG engine unavailable
 - Structured ComplianceResponseSchema JSON responses
+
+Also implements the GET /api/v1/health endpoint for pipeline status monitoring.
 """
 
 import asyncio
@@ -18,6 +20,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from src.models import ComplianceQueryRequest, ComplianceResponseSchema
+from src.pipeline.orchestrator import PipelineOrchestrator
 from src.rag.engine import RAGEngine
 
 logger = logging.getLogger(__name__)
@@ -69,6 +72,29 @@ async def verify_api_key(
         )
 
     return provided_token
+
+
+# --- Pipeline Orchestrator dependency ---
+
+_pipeline_orchestrator: PipelineOrchestrator | None = None
+
+
+def set_pipeline_orchestrator(orchestrator: PipelineOrchestrator | None) -> None:
+    """Set the PipelineOrchestrator instance for dependency injection.
+
+    This allows the orchestrator to be wired in during application startup
+    or overridden in tests.
+
+    Args:
+        orchestrator: The PipelineOrchestrator instance, or None to clear.
+    """
+    global _pipeline_orchestrator
+    _pipeline_orchestrator = orchestrator
+
+
+def get_pipeline_orchestrator() -> PipelineOrchestrator | None:
+    """Return the current PipelineOrchestrator instance, or None if not set."""
+    return _pipeline_orchestrator
 
 
 # --- RAG Engine dependency ---
@@ -149,3 +175,29 @@ async def query_compliance(
         raise HTTPException(status_code=503)
 
     return response
+
+
+
+# --- Health check endpoint ---
+
+
+@router.get("/api/v1/health")
+async def health_check() -> dict:
+    """Return pipeline status and last successful ingestion timestamp.
+
+    This endpoint does not require authentication. It reports the current
+    state of the ingestion pipeline for monitoring purposes.
+
+    Returns:
+        JSON with status ("idle", "running", "error") and
+        last_ingestion_timestamp (ISO string or null).
+    """
+    orchestrator = get_pipeline_orchestrator()
+
+    if orchestrator is None:
+        return {
+            "status": "idle",
+            "last_ingestion_timestamp": None,
+        }
+
+    return orchestrator.get_status()

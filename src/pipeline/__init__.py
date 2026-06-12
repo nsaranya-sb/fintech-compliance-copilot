@@ -1,1 +1,1 @@
-"""Pipeline orchestration for document ingestion."""
+"""Pipeline subpackage for document ingestion orchestration."""

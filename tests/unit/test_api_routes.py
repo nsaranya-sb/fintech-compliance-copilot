@@ -1,6 +1,7 @@
-"""Unit tests for the API routes - Task 9.1 validation.
+"""Unit tests for the API routes - Task 9.1 and 10.2 validation.
 
-Tests authentication, request validation, 503 handling, and timeout behavior.
+Tests authentication, request validation, 503 handling, timeout behavior,
+and health check endpoint.
 """
 
 import asyncio
@@ -11,12 +12,17 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.api.app import create_app
-from src.api.routes import get_rag_engine, set_rag_engine
+from src.api.routes import (
+    get_rag_engine,
+    set_pipeline_orchestrator,
+    set_rag_engine,
+)
 from src.models import (
     ComplianceResponseSchema,
     GroundingConfidence,
     RiskClassification,
 )
+from src.pipeline.orchestrator import PipelineOrchestrator
 from src.rag.engine import RAGEngine
 
 
@@ -51,8 +57,9 @@ def setup_env():
     """Set up environment for all tests."""
     with patch.dict(os.environ, {"API_AUTH_TOKEN": "test-token-123"}):
         yield
-    # Clean up RAG engine state
+    # Clean up RAG engine and orchestrator state
     set_rag_engine(None)
+    set_pipeline_orchestrator(None)
 
 
 @pytest.mark.asyncio
@@ -192,3 +199,85 @@ async def test_503_when_rag_engine_raises_exception(app, auth_headers):
         )
     assert response.status_code == 503
     assert response.headers.get("retry-after") == "30"
+
+
+
+# --- Health check endpoint tests (Task 10.2) ---
+
+
+@pytest.mark.asyncio
+async def test_health_check_no_orchestrator(app):
+    """Test health check returns idle with null timestamp when no orchestrator is set."""
+    set_pipeline_orchestrator(None)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "idle"
+    assert data["last_ingestion_timestamp"] is None
+
+
+@pytest.mark.asyncio
+async def test_health_check_no_auth_required(app):
+    """Test health check does NOT require authentication."""
+    set_pipeline_orchestrator(None)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # No auth headers provided
+        response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_health_check_with_idle_orchestrator(app):
+    """Test health check returns idle status from orchestrator."""
+    orchestrator = MagicMock(spec=PipelineOrchestrator)
+    orchestrator.get_status.return_value = {
+        "status": "idle",
+        "last_ingestion_timestamp": "2024-01-15T10:30:00+00:00",
+    }
+    set_pipeline_orchestrator(orchestrator)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "idle"
+    assert data["last_ingestion_timestamp"] == "2024-01-15T10:30:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_health_check_with_running_orchestrator(app):
+    """Test health check returns running status from orchestrator."""
+    orchestrator = MagicMock(spec=PipelineOrchestrator)
+    orchestrator.get_status.return_value = {
+        "status": "running",
+        "last_ingestion_timestamp": None,
+    }
+    set_pipeline_orchestrator(orchestrator)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "running"
+    assert data["last_ingestion_timestamp"] is None
+
+
+@pytest.mark.asyncio
+async def test_health_check_with_error_orchestrator(app):
+    """Test health check returns error status from orchestrator."""
+    orchestrator = MagicMock(spec=PipelineOrchestrator)
+    orchestrator.get_status.return_value = {
+        "status": "error",
+        "last_ingestion_timestamp": "2024-01-14T08:00:00+00:00",
+    }
+    set_pipeline_orchestrator(orchestrator)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "error"
+    assert data["last_ingestion_timestamp"] == "2024-01-14T08:00:00+00:00"
