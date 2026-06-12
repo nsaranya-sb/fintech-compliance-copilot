@@ -164,8 +164,8 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
 - [x] 8. Checkpoint - Ensure RAG engine tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 9. Implement Compliance API
-  - [ ] 9.1 Implement FastAPI application with authentication and query endpoint
+- [x] 9. Implement Compliance API
+  - [x] 9.1 Implement FastAPI application with authentication and query endpoint
     - Create `src/api/app.py` with FastAPI application setup and CORS configuration
     - Create `src/api/routes.py` with POST `/api/v1/compliance/query` endpoint
     - Implement API key / bearer token authentication via FastAPI dependency injection (`verify_api_key`)
