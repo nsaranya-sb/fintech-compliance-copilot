@@ -52,6 +52,7 @@ def wire_dependencies(settings: Settings | None = None) -> None:
     embedding_service = EmbeddingService(
         model=settings.EMBEDDING_MODEL,
         batch_size=settings.EMBEDDING_BATCH_SIZE,
+        api_key=settings.OPENAI_API_KEY,
     )
 
     vector_store = ChromaVectorStore(

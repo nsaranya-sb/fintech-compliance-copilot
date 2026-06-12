@@ -25,17 +25,18 @@ class EmbeddingService:
     automatic retry with exponential backoff on API failures.
     """
 
-    def __init__(self, model: str = "text-embedding-3-small", batch_size: int = 100):
+    def __init__(self, model: str = "text-embedding-3-small", batch_size: int = 100, api_key: str | None = None):
         """Initialize with embedding model configuration.
 
         Args:
             model: OpenAI embedding model name. Defaults to text-embedding-3-small.
             batch_size: Number of chunks to embed per API call. Defaults to 100.
+            api_key: OpenAI API key. If None, reads from OPENAI_API_KEY env var.
         """
         self.model = model
         self.batch_size = batch_size
-        api_key = os.environ.get("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=api_key)
+        resolved_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self.client = OpenAI(api_key=resolved_key)
 
     def embed_chunks(self, chunks: list[Chunk]) -> list[EmbeddingResult]:
         """Batch-embed document chunks with retry logic.
