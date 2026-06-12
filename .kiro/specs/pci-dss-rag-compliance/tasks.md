@@ -6,8 +6,8 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
 
 ## Tasks
 
-- [ ] 1. Set up project structure, dependencies, and core data models
-  - [ ] 1.1 Create project directory structure and configuration files
+- [x] 1. Set up project structure, dependencies, and core data models
+  - [x] 1.1 Create project directory structure and configuration files
     - Create `src/` package with subpackages: `parsers/`, `embeddings/`, `vectorstore/`, `rag/`, `api/`, `pipeline/`
     - Create `tests/` directory with subdirectories: `unit/`, `property/`, `integration/`
     - Create `pyproject.toml` with dependencies: fastapi, uvicorn, pydantic, pymupdf, chromadb, openai, anthropic, python-dotenv
@@ -15,7 +15,7 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
     - Create `.env.example` with required environment variables: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `API_AUTH_TOKEN`
     - _Requirements: 1.1, 2.1, 3.1, 4.1_
 
-  - [ ] 1.2 Implement core Pydantic data models
+  - [x] 1.2 Implement core Pydantic data models
     - Create `src/models.py` with all domain models: `Chunk`, `PageContent`, `ParsedDocument`, `EmbeddingResult`, `RetrievedChunk`
     - Implement enums: `RiskClassification`, `GroundingConfidence`, `PipelineStatus`
     - Implement API models: `ComplianceQueryRequest`, `ComplianceResponseSchema`
@@ -24,14 +24,14 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
     - _Requirements: 4.2, 6.1, 7.4, 8.1_
 
 - [ ] 2. Implement Document Parser
-  - [ ] 2.1 Implement PDF text extraction with PyMuPDF
+  - [x] 2.1 Implement PDF text extraction with PyMuPDF
     - Create `src/parsers/pdf_parser.py` with `PDFParser` class
     - Implement `extract_pages()` method using `fitz.open()` and `page.get_text("dict")` for structured text extraction
     - Detect section headings and PCI DSS requirement numbers via regex patterns (e.g., `Requirement \d+\.\d+`)
     - Implement error handling for corrupted or unsupported files (log and skip without terminating)
     - _Requirements: 1.1, 1.4_
 
-  - [ ] 2.2 Implement chunk segmentation logic
+  - [x] 2.2 Implement chunk segmentation logic
     - Implement `segment_into_chunks()` method with configurable `max_chunk_tokens` parameter (default 512)
     - Preserve semantic boundaries at section/requirement level
     - Extend chunk boundaries to include complete sentences when a boundary falls mid-sentence
@@ -39,33 +39,33 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
     - Preserve verbatim text without summarization, including special characters, tables, and list structures
     - _Requirements: 1.2, 1.3, 8.1, 8.2, 8.3, 8.4_
 
-  - [ ]* 2.3 Write property tests for document chunking (Property 1)
+  - [ ] 2.3 Write property tests for document chunking (Property 1)
     - **Property 1: Document Chunking Round-Trip**
     - Generate random multi-section document text, parse into chunks, concatenate in order, and verify equivalence to original
     - **Validates: Requirements 8.1, 8.2, 8.3**
 
-  - [ ]* 2.4 Write property tests for chunk size and sentence boundaries (Property 2)
+  - [ ] 2.4 Write property tests for chunk size and sentence boundaries (Property 2)
     - **Property 2: Chunk Size and Sentence Boundary Invariants**
     - Generate random multi-sentence text with various max_chunk_tokens values, verify all chunks respect token limit and end at sentence boundaries
     - **Validates: Requirements 1.2, 8.4**
 
-  - [ ]* 2.5 Write property tests for chunk metadata completeness (Property 3)
+  - [ ] 2.5 Write property tests for chunk metadata completeness (Property 3)
     - **Property 3: Chunk Metadata Completeness**
     - Generate random parsed documents and verify every chunk has non-null source_file, page_number, and chunk_index
     - **Validates: Requirements 1.3**
 
-  - [ ]* 2.6 Write unit tests for PDF parser
+  - [ ] 2.6 Write unit tests for PDF parser
     - Test extraction with a small PCI DSS PDF fixture
     - Test error handling for corrupted files
     - Test empty PDF produces zero chunks
     - Test requirement number regex detection
     - _Requirements: 1.1, 1.4_
 
-- [ ] 3. Checkpoint - Ensure parser tests pass
+- [x] 3. Checkpoint - Ensure parser tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Implement Embedding Service
-  - [ ] 4.1 Implement embedding generation with OpenAI API
+- [x] 4. Implement Embedding Service
+  - [x] 4.1 Implement embedding generation with OpenAI API
     - Create `src/embeddings/embedding_service.py` with `EmbeddingService` class
     - Implement `embed_chunks()` for batch processing with configurable batch_size (default 100)
     - Implement `embed_query()` for single query embedding
@@ -79,8 +79,8 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
     - Test single query embedding
     - _Requirements: 2.1, 2.3, 2.4_
 
-- [ ] 5. Implement Vector Store
-  - [ ] 5.1 Implement ChromaDB vector store with retrieval logic
+- [x] 5. Implement Vector Store
+  - [x] 5.1 Implement ChromaDB vector store with retrieval logic
     - Create `src/vectorstore/chroma_store.py` with `ChromaVectorStore` class
     - Initialize ChromaDB `PersistentClient` with cosine similarity metric at `./data/vectordb`
     - Implement `add_embeddings()` to store embeddings with full chunk metadata
@@ -115,11 +115,11 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
     - Test metadata filtering works correctly
     - _Requirements: 3.1, 3.4, 3.5_
 
-- [ ] 6. Checkpoint - Ensure embedding and vector store tests pass
+- [x] 6. Checkpoint - Ensure embedding and vector store tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 7. Implement RAG Engine
-  - [ ] 7.1 Implement RAG engine with Claude 3.5 Sonnet integration
+  - [x] 7.1 Implement RAG engine with Claude 3.5 Sonnet integration
     - Create `src/rag/engine.py` with `RAGEngine` class
     - Implement `process_query()` orchestrating: embed query → retrieve chunks → generate response → classify risk
     - Implement `_build_prompt()` with anti-hallucination constraints (restrict generation to retrieved content only)
@@ -129,17 +129,17 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
     - Handle conflicting chunks: flag conflict in assessment, assign 🟡 Warning
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 6.1, 6.2, 6.3, 6.4, 6.5, 7.1, 7.2, 7.3, 7.5_
 
-  - [ ]* 7.2 Write property tests for response schema conformance (Property 8)
+  - [ ] 7.2 Write property tests for response schema conformance (Property 8)
     - **Property 8: Response Schema Conformance**
     - Mock Claude responses, generate random valid queries with non-empty retrieval, verify response contains all required fields with valid enum values
     - **Validates: Requirements 4.2, 5.5, 6.1**
 
-  - [ ]* 7.3 Write property tests for citation presence (Property 10)
+  - [ ] 7.3 Write property tests for citation presence (Property 10)
     - **Property 10: Citation Presence in Assessments**
     - Mock Claude to produce valid responses, verify citations array is non-empty for all non-empty retrievals
     - **Validates: Requirements 5.2**
 
-  - [ ]* 7.4 Write property tests for citation format (Property 11)
+  - [ ] 7.4 Write property tests for citation format (Property 11)
     - **Property 11: Citation Format Consistency**
     - Generate random citation strings from mock responses, verify each matches pattern "Requirement X.Y[.Z] under PCI DSS v4.0.1, Section [section_name]"
     - **Validates: Requirements 5.3**
@@ -161,7 +161,7 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
     - Test low confidence disclaimer prepending
     - _Requirements: 5.4, 6.5, 7.3, 7.5_
 
-- [ ] 8. Checkpoint - Ensure RAG engine tests pass
+- [x] 8. Checkpoint - Ensure RAG engine tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 9. Implement Compliance API
@@ -252,15 +252,13 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
     { "id": 1, "tasks": ["1.2"] },
     { "id": 2, "tasks": ["2.1", "4.1"] },
     { "id": 3, "tasks": ["2.2", "4.2"] },
-    { "id": 4, "tasks": ["2.3", "2.4", "2.5", "2.6", "5.1"] },
-    { "id": 5, "tasks": ["5.2", "5.3", "5.4", "5.5", "5.6"] },
-    { "id": 6, "tasks": ["7.1"] },
-    { "id": 7, "tasks": ["7.2", "7.3", "7.4", "7.5", "7.6", "7.7"] },
-    { "id": 8, "tasks": ["9.1"] },
-    { "id": 9, "tasks": ["9.2", "9.3", "10.1"] },
-    { "id": 10, "tasks": ["10.2", "10.3"] },
-    { "id": 11, "tasks": ["11.1"] },
-    { "id": 12, "tasks": ["11.2", "11.3"] }
+    { "id": 4, "tasks": ["5.1", "2.3", "2.4", "2.5", "2.6"] },
+    { "id": 5, "tasks": ["7.1", "5.2", "5.3", "5.4", "5.5", "5.6"] },
+    { "id": 6, "tasks": ["9.1", "7.2", "7.3", "7.4", "7.5", "7.6", "7.7"] },
+    { "id": 7, "tasks": ["10.1", "9.2", "9.3"] },
+    { "id": 8, "tasks": ["10.2", "10.3"] },
+    { "id": 9, "tasks": ["11.1"] },
+    { "id": 10, "tasks": ["11.2", "11.3"] }
   ]
 }
 ```

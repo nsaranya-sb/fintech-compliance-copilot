@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Vector database storage
+data/vectordb/
+
+# Pipeline state
+data/pipeline_state.json
