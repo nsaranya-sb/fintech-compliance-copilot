@@ -52,7 +52,15 @@ async def verify_api_key(
     """
     expected_token = os.environ.get("API_AUTH_TOKEN")
 
+    logger.info(
+        "Auth check: expected_token=%s, bearer=%s, api_key=%s",
+        repr(expected_token),
+        repr(bearer.credentials if bearer else None),
+        repr(api_key),
+    )
+
     if not expected_token:
+        logger.warning("API_AUTH_TOKEN not set in environment")
         raise HTTPException(
             status_code=401,
             detail={"error": "Authentication required"},
@@ -66,6 +74,11 @@ async def verify_api_key(
         provided_token = api_key
 
     if not provided_token or provided_token != expected_token:
+        logger.warning(
+            "Token mismatch: provided=%s, expected=%s",
+            repr(provided_token),
+            repr(expected_token),
+        )
         raise HTTPException(
             status_code=401,
             detail={"error": "Authentication required"},

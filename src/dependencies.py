@@ -38,12 +38,13 @@ def wire_dependencies(settings: Settings | None = None) -> None:
         settings = get_settings()
 
     # Export API keys to environment so service constructors can pick them up
+    # Use direct assignment to override any stale shell-level env vars
     if settings.OPENAI_API_KEY:
-        os.environ.setdefault("OPENAI_API_KEY", settings.OPENAI_API_KEY)
+        os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
     if settings.ANTHROPIC_API_KEY:
-        os.environ.setdefault("ANTHROPIC_API_KEY", settings.ANTHROPIC_API_KEY)
+        os.environ["ANTHROPIC_API_KEY"] = settings.ANTHROPIC_API_KEY
     if settings.API_AUTH_TOKEN:
-        os.environ.setdefault("API_AUTH_TOKEN", settings.API_AUTH_TOKEN)
+        os.environ["API_AUTH_TOKEN"] = settings.API_AUTH_TOKEN
 
     # Instantiate services
     parser = PDFParser(max_chunk_tokens=settings.MAX_CHUNK_TOKENS)
