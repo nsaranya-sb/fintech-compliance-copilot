@@ -8,8 +8,9 @@ import logging
 
 from dotenv import load_dotenv
 
-# Load .env file before anything else
-load_dotenv()
+# Load .env file before anything else — override=True ensures .env takes
+# precedence over any stale shell-level environment variables
+load_dotenv(override=True)
 
 from src.api.app import app  # noqa: E402
 from src.dependencies import wire_dependencies  # noqa: E402

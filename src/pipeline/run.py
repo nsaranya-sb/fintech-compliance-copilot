@@ -18,8 +18,8 @@ from dotenv import load_dotenv
 
 def main() -> None:
     """Run the ingestion pipeline from the command line."""
-    # Load .env file
-    load_dotenv()
+    # Load .env file — override=True ensures .env takes precedence over shell env vars
+    load_dotenv(override=True)
 
     # Configure logging
     logging.basicConfig(
@@ -38,9 +38,9 @@ def main() -> None:
 
     # Export API keys to environment for service constructors
     if settings.OPENAI_API_KEY:
-        os.environ.setdefault("OPENAI_API_KEY", settings.OPENAI_API_KEY)
+        os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
     if settings.ANTHROPIC_API_KEY:
-        os.environ.setdefault("ANTHROPIC_API_KEY", settings.ANTHROPIC_API_KEY)
+        os.environ["ANTHROPIC_API_KEY"] = settings.ANTHROPIC_API_KEY
 
     # Parse CLI arguments
     arg_parser = argparse.ArgumentParser(
@@ -64,6 +64,7 @@ def main() -> None:
     embedding_service = EmbeddingService(
         model=settings.EMBEDDING_MODEL,
         batch_size=settings.EMBEDDING_BATCH_SIZE,
+        api_key=settings.OPENAI_API_KEY,
     )
     vector_store = ChromaVectorStore(
         persist_directory=settings.VECTORDB_PATH,

@@ -72,7 +72,7 @@ class ChromaVectorStore:
         self,
         query_embedding: list[float],
         top_k: int = 5,
-        min_similarity: float = 0.7,
+        min_similarity: float = 0.5,
         requirement_filter: str | None = None,
     ) -> list[RetrievedChunk]:
         """Retrieve top-k chunks by cosine similarity with optional filtering.
@@ -81,7 +81,7 @@ class ChromaVectorStore:
             query_embedding: Query vector for similarity search.
             top_k: Maximum number of results to return (1-20).
             min_similarity: Minimum similarity threshold (0.0-1.0). Results below
-                this threshold are excluded.
+                this threshold are excluded. Default is 0.5 for regulatory text.
             requirement_filter: Optional requirement group filter (e.g., "1-3" means
                 requirements 1.x through 3.x).
 
