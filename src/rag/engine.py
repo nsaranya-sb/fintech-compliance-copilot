@@ -49,6 +49,7 @@ class RAGEngine:
         vector_store: ChromaVectorStore,
         embedding_service: EmbeddingService,
         model: str = "claude-sonnet-4-20250514",
+        api_key: str | None = None,
     ):
         """Initialize with vector store and embedding service dependencies.
 
@@ -56,12 +57,13 @@ class RAGEngine:
             vector_store: ChromaDB vector store for chunk retrieval.
             embedding_service: Service for generating query embeddings.
             model: Anthropic model to use for generation. Defaults to Claude 3.5 Sonnet.
+            api_key: Anthropic API key. If None, reads from ANTHROPIC_API_KEY env var.
         """
         self._vector_store = vector_store
         self._embedding_service = embedding_service
         self._model = model
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        self._client = Anthropic(api_key=api_key)
+        resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        self._client = Anthropic(api_key=resolved_key)
 
     def process_query(self, request: ComplianceQueryRequest) -> ComplianceResponseSchema:
         """Full RAG pipeline: embed query → retrieve → generate → classify.

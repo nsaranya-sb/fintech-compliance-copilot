@@ -63,6 +63,7 @@ def wire_dependencies(settings: Settings | None = None) -> None:
     rag_engine = RAGEngine(
         vector_store=vector_store,
         embedding_service=embedding_service,
+        api_key=settings.ANTHROPIC_API_KEY,
     )
 
     pipeline_orchestrator = PipelineOrchestrator(
