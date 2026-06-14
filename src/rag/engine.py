@@ -90,6 +90,20 @@ class RAGEngine:
         # Step 2: Retrieve relevant chunks
         chunks = self._vector_store.query(query_embedding=query_embedding)
 
+        # Debug log: top retrieved chunks before any filtering or LLM generation
+        logger.debug(
+            "Retrieved %d chunks for query: %.100s", len(chunks), request.query
+        )
+        for i, rc in enumerate(chunks[:10]):
+            logger.debug(
+                "  [%d] score=%.4f | id=%s | req=%s | section=%s",
+                i + 1,
+                rc.similarity_score,
+                rc.chunk.id,
+                rc.chunk.requirement_number or "N/A",
+                rc.chunk.section_heading or "N/A",
+            )
+
         # Step 3: Handle empty retrieval
         if not chunks:
             logger.info("No relevant chunks found for query: %s", request.query[:100])

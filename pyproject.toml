@@ -18,6 +18,8 @@ dependencies = [
     "openai>=1.12",
     "anthropic>=0.18",
     "python-dotenv>=1.0",
+    "streamlit>=1.31",
+    "requests>=2.31",
 ]
 
 [project.optional-dependencies]
