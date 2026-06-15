@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 REQUIREMENT_PATTERN = re.compile(
     r"Requirement\s+(\d+(?:\.\d+)*(?:\.\d+)*)", re.IGNORECASE
 )
+# Matches lines starting with a requirement number directly, e.g. "3.3 Sensitive..."
+# Must be at least X.Y format (two numeric components) to avoid matching page numbers
+INLINE_REQUIREMENT_PATTERN = re.compile(
+    r"^(\d+\.\d+(?:\.\d+)*)\s+[A-Z]"
+)
 SECTION_HEADING_PATTERN = re.compile(
     r"^(?:Requirement\s+\d+|Section\s+\d+|Appendix\s+[A-Z]|"
     r"Overview|Purpose|Scope|Definitions?|Guidance|"
@@ -34,12 +39,13 @@ class PDFParser:
     ParsedDocument objects.
     """
 
-    def __init__(self, max_chunk_tokens: int = 512):
+    def __init__(self, max_chunk_tokens: int = 200):
         """Initialize parser with configurable chunk size.
 
         Args:
-            max_chunk_tokens: Maximum number of tokens per chunk (used by
-                segment_into_chunks, implemented separately in Task 2.2).
+            max_chunk_tokens: Maximum number of tokens per chunk. Smaller chunks
+                (~200 tokens) produce sharper embeddings for regulatory text,
+                reducing score clustering around 0.5.
         """
         self.max_chunk_tokens = max_chunk_tokens
 
@@ -309,11 +315,19 @@ class PDFParser:
 
         for i, line in enumerate(all_lines):
             is_new_section = False
+            detected_req_num = None
 
-            if REQUIREMENT_PATTERN.match(line):
+            req_match = REQUIREMENT_PATTERN.match(line)
+            if req_match:
                 is_new_section = True
-            elif SECTION_HEADING_PATTERN.match(line):
-                is_new_section = True
+                detected_req_num = req_match.group(1)
+            else:
+                inline_match = INLINE_REQUIREMENT_PATTERN.match(line)
+                if inline_match:
+                    is_new_section = True
+                    detected_req_num = inline_match.group(1)
+                elif SECTION_HEADING_PATTERN.match(line):
+                    is_new_section = True
 
             if is_new_section and i > current_start:
                 # Flush previous segment
@@ -327,9 +341,8 @@ class PDFParser:
                 current_start = i
 
                 # Update metadata for new section
-                req_match = REQUIREMENT_PATTERN.match(line)
-                if req_match:
-                    current_requirement = req_match.group(1)
+                if detected_req_num:
+                    current_requirement = detected_req_num
                     current_heading = line.strip()
                 else:
                     current_heading = line.strip()

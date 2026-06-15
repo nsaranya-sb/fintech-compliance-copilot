@@ -7,8 +7,10 @@ Uses Claude 3.5 Sonnet via Anthropic API with structured JSON output (tool use)
 to produce citation-backed compliance assessments with anti-hallucination constraints.
 """
 
+import json
 import logging
 import os
+import re
 
 from anthropic import Anthropic
 
@@ -34,6 +36,15 @@ LOW_CONFIDENCE_DISCLAIMER = (
 # Fallback message when no chunks are retrieved
 EMPTY_RETRIEVAL_MESSAGE = "Clause not found in source documentation"
 
+# Maximum number of sub-queries from decomposition
+MAX_SUB_QUERIES = 5
+
+# Maximum merged chunks to pass to the LLM
+MAX_MERGED_CHUNKS = 12
+
+# Similarity threshold for merged results
+SIMILARITY_THRESHOLD = 0.4
+
 
 class RAGEngine:
     """Orchestrates retrieval-augmented generation for PCI DSS compliance queries.
@@ -50,6 +61,7 @@ class RAGEngine:
         embedding_service: EmbeddingService,
         model: str = "claude-sonnet-4-20250514",
         api_key: str | None = None,
+        use_query_decomposition: bool = True,
     ):
         """Initialize with vector store and embedding service dependencies.
 
@@ -58,23 +70,27 @@ class RAGEngine:
             embedding_service: Service for generating query embeddings.
             model: Anthropic model to use for generation. Defaults to Claude 3.5 Sonnet.
             api_key: Anthropic API key. If None, reads from ANTHROPIC_API_KEY env var.
+            use_query_decomposition: If True, uses multi-query decomposition for
+                retrieval. If False, uses legacy single-query path.
         """
         self._vector_store = vector_store
         self._embedding_service = embedding_service
         self._model = model
+        self._use_query_decomposition = use_query_decomposition
         resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         self._client = Anthropic(api_key=resolved_key)
 
     def process_query(self, request: ComplianceQueryRequest) -> ComplianceResponseSchema:
-        """Full RAG pipeline: embed query → retrieve → generate → classify.
+        """Full RAG pipeline: decompose → embed → retrieve → merge → generate → classify.
 
         Orchestrates the complete compliance query pipeline:
-        1. Embed the query using the embedding service
-        2. Retrieve top-k similar chunks from the vector store
-        3. Handle empty retrieval with fallback response
-        4. Build constrained prompt with anti-hallucination instructions
-        5. Generate response via Claude with structured output
-        6. Apply safety overrides (low confidence, conflicts)
+        1. Decompose query into focused sub-queries (or use single query if disabled)
+        2. For each sub-query: preprocess, embed, retrieve top-5
+        3. Merge all retrieved chunks (deduplicate, keep highest score, cap at 12)
+        4. Handle empty retrieval with fallback response
+        5. Build constrained prompt with anti-hallucination instructions
+        6. Generate response via Claude with structured output
+        7. Apply safety overrides (low confidence, conflicts)
 
         Args:
             request: The compliance query request containing query text
@@ -84,27 +100,12 @@ class RAGEngine:
             A ComplianceResponseSchema with assessment, risk classification,
             citations, grounding confidence, and retrieved chunk IDs.
         """
-        # Step 1: Embed the query
-        query_embedding = self._embedding_service.embed_query(request.query)
+        if self._use_query_decomposition:
+            chunks = self._retrieve_with_decomposition(request.query)
+        else:
+            chunks = self._retrieve_single_query(request.query)
 
-        # Step 2: Retrieve relevant chunks
-        chunks = self._vector_store.query(query_embedding=query_embedding)
-
-        # Debug log: top retrieved chunks before any filtering or LLM generation
-        logger.debug(
-            "Retrieved %d chunks for query: %.100s", len(chunks), request.query
-        )
-        for i, rc in enumerate(chunks[:10]):
-            logger.debug(
-                "  [%d] score=%.4f | id=%s | req=%s | section=%s",
-                i + 1,
-                rc.similarity_score,
-                rc.chunk.id,
-                rc.chunk.requirement_number or "N/A",
-                rc.chunk.section_heading or "N/A",
-            )
-
-        # Step 3: Handle empty retrieval
+        # Handle empty retrieval
         if not chunks:
             logger.info("No relevant chunks found for query: %s", request.query[:100])
             return ComplianceResponseSchema(
@@ -115,17 +116,237 @@ class RAGEngine:
                 retrieved_chunk_ids=[],
             )
 
-        # Step 4: Build prompt with anti-hallucination constraints
+        # Build prompt with anti-hallucination constraints
         prompt = self._build_prompt(
             query=request.query,
             context=request.context,
             chunks=chunks,
         )
 
-        # Step 5: Generate response via Claude
+        # Generate response via Claude
         response = self._generate_response(prompt=prompt, chunks=chunks)
 
         return response
+
+    # -------------------------------------------------------------------------
+    # Retrieval paths
+    # -------------------------------------------------------------------------
+
+    def _retrieve_single_query(self, query: str) -> list[RetrievedChunk]:
+        """Legacy single-query retrieval path.
+
+        Preprocesses the query, embeds it, and retrieves top-k chunks
+        with threshold filtering.
+
+        Args:
+            query: Raw user query text.
+
+        Returns:
+            List of RetrievedChunk objects passing the similarity threshold.
+        """
+        cleaned_query = self._preprocess_query(query)
+        logger.debug("Single-query path | cleaned: %s", cleaned_query[:200])
+
+        query_embedding = self._embedding_service.embed_query(cleaned_query)
+
+        # Diagnostic: raw top-10 unfiltered
+        raw_top_10 = self._vector_store.query(
+            query_embedding=query_embedding, top_k=10, min_similarity=0.0
+        )
+        logger.debug("RAW top-10 (unfiltered) for single query:")
+        for i, rc in enumerate(raw_top_10):
+            logger.debug(
+                "  [%d] score=%.4f | id=%s | req=%s | section=%s",
+                i + 1,
+                rc.similarity_score,
+                rc.chunk.id,
+                rc.chunk.requirement_number or "N/A",
+                rc.chunk.section_heading or "N/A",
+            )
+
+        # Filtered retrieval
+        chunks = self._vector_store.query(
+            query_embedding=query_embedding, top_k=10, min_similarity=SIMILARITY_THRESHOLD
+        )
+        return chunks
+
+    def _retrieve_with_decomposition(self, query: str) -> list[RetrievedChunk]:
+        """Multi-query decomposition retrieval path.
+
+        Decomposes the scenario into focused sub-queries, retrieves top-3 from
+        each sub-query to guarantee representation of each compliance issue,
+        then deduplicates by chunk ID (keeping highest score and tracking which
+        sub-query contributed it).
+
+        Args:
+            query: Raw user query/scenario text.
+
+        Returns:
+            Merged, deduplicated list of RetrievedChunk objects sorted by
+            descending similarity score.
+        """
+        # Number of top chunks to take from each sub-query
+        TOP_PER_SUBQUERY = 3
+
+        # Step 1: Decompose into sub-queries
+        sub_queries = self._decompose_query(query)
+        logger.debug(
+            "Query decomposed into %d sub-queries: %s",
+            len(sub_queries),
+            sub_queries,
+        )
+
+        # Step 2: For each sub-query, preprocess → embed → retrieve top-5,
+        # then take top-3 per sub-query for the merge pool
+        # Track best score per chunk ID and which sub-query contributed it
+        chunk_map: dict[str, dict] = {}  # chunk_id -> {chunk, score, source_query}
+
+        for sq_idx, sub_query in enumerate(sub_queries):
+            cleaned = self._preprocess_query(sub_query)
+            logger.debug("  Sub-query %d: '%s' → cleaned: '%s'", sq_idx + 1, sub_query[:80], cleaned[:80])
+
+            embedding = self._embedding_service.embed_query(cleaned)
+            results = self._vector_store.query(
+                query_embedding=embedding, top_k=5, min_similarity=0.0
+            )
+
+            logger.debug("  Sub-query %d retrieved %d chunks:", sq_idx + 1, len(results))
+            for i, rc in enumerate(results):
+                logger.debug(
+                    "    [%d] score=%.4f | id=%s | req=%s",
+                    i + 1,
+                    rc.similarity_score,
+                    rc.chunk.id,
+                    rc.chunk.requirement_number or "N/A",
+                )
+
+            # Take only top-3 from this sub-query for the merge pool
+            top_for_subquery = results[:TOP_PER_SUBQUERY]
+            for rc in top_for_subquery:
+                chunk_id = rc.chunk.id
+                if chunk_id not in chunk_map or rc.similarity_score > chunk_map[chunk_id]["score"]:
+                    chunk_map[chunk_id] = {
+                        "chunk": rc,
+                        "score": rc.similarity_score,
+                        "source_query": sub_query,
+                    }
+
+        # Step 3: Apply threshold, sort by score descending
+        filtered = [
+            entry
+            for entry in chunk_map.values()
+            if entry["score"] >= SIMILARITY_THRESHOLD
+        ]
+        filtered.sort(key=lambda e: e["score"], reverse=True)
+
+        merged = [entry["chunk"] for entry in filtered]
+
+        logger.debug(
+            "Merged results: %d unique chunks (top-%d per sub-query, threshold %.2f)",
+            len(merged),
+            TOP_PER_SUBQUERY,
+            SIMILARITY_THRESHOLD,
+        )
+        for i, entry in enumerate(filtered):
+            rc = entry["chunk"]
+            logger.debug(
+                "  Final [%d] score=%.4f | id=%s | req=%s | contributed_by='%s'",
+                i + 1,
+                rc.similarity_score,
+                rc.chunk.id,
+                rc.chunk.requirement_number or "N/A",
+                entry["source_query"][:60],
+            )
+
+        return merged
+
+    # -------------------------------------------------------------------------
+    # Query decomposition
+    # -------------------------------------------------------------------------
+
+    def _decompose_query(self, scenario: str) -> list[str]:
+        """Decompose a multi-issue compliance scenario into focused sub-queries.
+
+        Calls a fast LLM to split the scenario into up to MAX_SUB_QUERIES
+        self-contained compliance questions. Falls back to [scenario] on
+        any failure so the request never breaks.
+
+        Args:
+            scenario: The full user scenario/query text.
+
+        Returns:
+            List of focused compliance questions (1 to MAX_SUB_QUERIES items).
+        """
+        decomposition_prompt = (
+            "You are a PCI DSS compliance analyst. A user has described a system "
+            "architecture or compliance scenario. Your job is to decompose it into "
+            "focused, self-contained compliance questions that can each be searched "
+            "independently against a PCI DSS document corpus.\n\n"
+            "Rules:\n"
+            "- Output a JSON array of strings, each being one focused question.\n"
+            "- Maximum 5 questions.\n"
+            "- Each question should target a specific PCI DSS concern "
+            "(e.g., data storage, encryption, access control, logging, network segmentation).\n"
+            "- Each question must be self-contained — understandable without the others.\n"
+            "- If the scenario is simple and covers only one concern, return an array with one item.\n"
+            "- Output ONLY the JSON array, no explanation.\n\n"
+            f"Scenario:\n{scenario}"
+        )
+
+        try:
+            message = self._client.messages.create(
+                model=self._model,
+                max_tokens=1024,
+                messages=[
+                    {"role": "user", "content": decomposition_prompt},
+                ],
+            )
+
+            raw_text = message.content[0].text.strip()
+            sub_queries = self._parse_json_array(raw_text)
+
+            if not sub_queries:
+                logger.warning("Decomposition returned empty list, falling back to original query")
+                return [scenario]
+
+            # Cap at max
+            return sub_queries[:MAX_SUB_QUERIES]
+
+        except Exception as e:
+            logger.warning("Query decomposition failed, falling back to original: %s", str(e))
+            return [scenario]
+
+    @staticmethod
+    def _parse_json_array(raw_text: str) -> list[str]:
+        """Defensively parse a JSON array from LLM output.
+
+        Strips markdown code fences and attempts JSON parsing. Returns an
+        empty list on any failure.
+
+        Args:
+            raw_text: Raw LLM response text, potentially wrapped in code fences.
+
+        Returns:
+            Parsed list of strings, or empty list on failure.
+        """
+        # Strip markdown code fences (```json ... ``` or ``` ... ```)
+        cleaned = re.sub(r"^```(?:json)?\s*\n?", "", raw_text, flags=re.MULTILINE)
+        cleaned = re.sub(r"\n?```\s*$", "", cleaned, flags=re.MULTILINE)
+        cleaned = cleaned.strip()
+
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, list) and all(isinstance(item, str) for item in parsed):
+                return parsed
+            logger.warning("Decomposition JSON is not a list of strings: %s", type(parsed))
+            return []
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning("Failed to parse decomposition JSON: %s | raw: %s", e, cleaned[:200])
+            return []
+
+    # -------------------------------------------------------------------------
+    # Prompt building & generation
+    # -------------------------------------------------------------------------
 
     def _build_prompt(
         self, query: str, context: str | None, chunks: list[RetrievedChunk]
@@ -358,6 +579,10 @@ class RAGEngine:
             retrieved_chunk_ids=retrieved_chunk_ids,
         )
 
+    # -------------------------------------------------------------------------
+    # Helpers
+    # -------------------------------------------------------------------------
+
     def _extract_tool_result(self, message) -> dict:
         """Extract the tool use result from Claude's response.
 
@@ -424,3 +649,42 @@ class RAGEngine:
                 return True
 
         return False
+
+    @staticmethod
+    def _preprocess_query(query: str) -> str:
+        """Strip conversational filler from query to improve embedding quality.
+
+        Removes common non-consequential phrases that dilute semantic signal
+        (e.g., "is this permitted", "can you tell me", "please check if")
+        while preserving the substantive technical content.
+
+        Args:
+            query: Raw user query text.
+
+        Returns:
+            Cleaned query with filler phrases removed. Falls back to the
+            original query if cleaning would produce an empty string.
+        """
+        # Phrases that add no semantic value for retrieval
+        filler_patterns = [
+            r"\bis\s+this\s+(permitted|allowed|compliant|okay|ok)\b",
+            r"\bcan\s+you\s+(tell\s+me|check|verify|confirm|assess)\b",
+            r"\bplease\s+(check|verify|confirm|tell\s+me|assess|evaluate)\b",
+            r"\bI\s+(want\s+to|need\s+to|would\s+like\s+to)\s+know\b",
+            r"\bdo\s+we\s+(need|have)\s+to\b",
+            r"\bis\s+it\s+(possible|necessary|required|okay|ok)\s+to\b",
+            r"\bwhat\s+are\s+the\s+requirements\s+for\b",
+            r"\bhow\s+do\s+I\b",
+            r"\bwould\s+this\s+be\b",
+            r"\bdoes\s+this\s+(comply|violate|meet)\b",
+        ]
+
+        cleaned = query
+        for pattern in filler_patterns:
+            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+
+        # Collapse multiple spaces and strip
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+        # Don't return empty string — fall back to original
+        return cleaned if cleaned else query

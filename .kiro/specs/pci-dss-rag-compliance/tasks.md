@@ -84,7 +84,7 @@ This plan implements a Python-based RAG application that parses PCI DSS v4.0/v4.
     - Create `src/vectorstore/chroma_store.py` with `ChromaVectorStore` class
     - Initialize ChromaDB `PersistentClient` with cosine similarity metric at `./data/vectordb`
     - Implement `add_embeddings()` to store embeddings with full chunk metadata
-    - Implement `query()` with top-k retrieval (configurable 1-20, default 5), minimum similarity threshold (default 0.7), and optional requirement group filtering
+    - Implement `query()` with top-k retrieval (configurable 1-20, default 5), minimum similarity threshold (default 0.5), and optional requirement group filtering
     - Implement `mark_superseded()` to handle document re-ingestion
     - Return empty result set when no chunks exceed similarity threshold
     - _Requirements: 2.2, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5_

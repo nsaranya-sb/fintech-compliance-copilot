@@ -20,6 +20,8 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+# Enable verbose retrieval diagnostics for the RAG engine
+logging.getLogger("src.rag.engine").setLevel(logging.DEBUG)
 
 # Wire all dependencies on module load so the app is ready to serve
 wire_dependencies()

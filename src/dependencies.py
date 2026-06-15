@@ -64,6 +64,7 @@ def wire_dependencies(settings: Settings | None = None) -> None:
         vector_store=vector_store,
         embedding_service=embedding_service,
         api_key=settings.ANTHROPIC_API_KEY,
+        use_query_decomposition=settings.USE_QUERY_DECOMPOSITION,
     )
 
     pipeline_orchestrator = PipelineOrchestrator(

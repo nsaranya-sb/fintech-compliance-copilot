@@ -28,7 +28,10 @@ class Settings(BaseSettings):
     EMBEDDING_BATCH_SIZE: int = 100
 
     # Parser configuration
-    MAX_CHUNK_TOKENS: int = 512
+    MAX_CHUNK_TOKENS: int = 200
+
+    # Retrieval configuration
+    USE_QUERY_DECOMPOSITION: bool = True
 
     # Documents directory for ingestion
     DOCUMENTS_DIR: str = "./data/raw"
