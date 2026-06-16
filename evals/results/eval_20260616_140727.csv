@@ -1,0 +1,11 @@
+id,hierarchy_recall_pct,exact_recall_pct,hierarchy_hits,hierarchy_misses,exact_hits,exact_misses,retrieved_reqs,expected_class,actual_class,class_match,passed,elapsed_s,error
+cvv_pan_unencrypted_logs,100.0,100.0,3.3.1.2|3.5|7.2.6,,3.3.1.2|3.5|7.2.6,,10|10.2.1.2|11.4.1|3.2.1|3.3.1.1|3.3.1.2|3.3.3|3.5|7.2.6|9.4.1|9.4.1.1,Non-Compliant,Non-Compliant,True,True,30.5,
+cvv_stored_encrypted_for_fraud,100.0,50.0,3.3.1|3.3.1.2,,3.3.1.2,3.3.1,1.4.4|3.2|3.3.1.1|3.3.1.2|3.3.3|3.6.1.4,Non-Compliant,Non-Compliant,True,True,18.5,
+indefinite_pan_retention,100.0,100.0,3.2.1,,3.2.1,,3.2|3.2.1|3.5|3.5.1|3.5.1.2|4.2.2,Non-Compliant,Non-Compliant,True,True,24.3,
+pan_masked_ui_logged_full,100.0,0.0,3.5,,,3.5,12.10.6|3|3.2|3.4|3.4.1|3.5.1,Non-Compliant,Non-Compliant,True,True,23.8,
+third_party_tokenization_at_ingestion,100.0,100.0,3.5,,3.5,,1.2.4|10.2.1.4|10.7|12.10.7|12.4|12.9|3.2|3.5,Compliant,Compliant,True,True,35.8,
+encryption_keys_with_data,50.0,50.0,3.6.1,3.5,3.6.1,3.5,3.6.1|3.6.1.1|3.6.1.3|3.6.1.4|3.7.2|3.7.3,Non-Compliant,Non-Compliant,True,True,20.3,
+shared_admin_accounts_cde,100.0,100.0,8.2.1|8.2.2,,8.2.1|8.2.2,,1.3.3|10.2.1|10.2.1.1|12.7.1|3.2|7.2.4|8.2.1|8.2.2|8.4.1|8.6|9.2.1,Non-Compliant,Non-Compliant,True,True,23.9,
+mfa_rollout_in_progress,100.0,66.7,8.4.2|8.4.3|8.5,,8.4.2|8.4.3,8.5,11.4.1|8.4|8.4.1|8.4.2|8.4.3|8.5.1,Non-Compliant,Non-Compliant,True,True,129.4,
+truncated_pan_only_compliant,100.0,100.0,3.5,,3.5,,10.2.1|10.2.1.1|10.7|3|3.2|3.5|3.5.1|7|7.2.6|9,Compliant,Compliant,True,True,28.2,
+verbose_logging_track_data,100.0,100.0,3.3.1|3.3.1.1,,3.3.1|3.3.1.1,,1.4.4|10|10.7|3.2|3.2.1|3.3.1|3.3.1.1|3.3.3|3.5,Non-Compliant,Non-Compliant,True,True,19.6,

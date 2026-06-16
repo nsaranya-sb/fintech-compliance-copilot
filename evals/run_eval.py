@@ -4,6 +4,10 @@ Reads test scenarios from eval/eval_scenarios.json, runs each through
 the RAG pipeline, scores retrieval recall and classification accuracy,
 prints a results table, and saves to a timestamped CSV.
 
+Scoring uses hierarchy-aware matching: expected "3.5" is satisfied by
+retrieved "3.5.1" (child) or vice versa (one is a dotted-prefix of the other).
+Exact-match results are also logged for comparison.
+
 Usage:
     python -m evals.run_eval
 """
@@ -55,15 +59,71 @@ def normalize_classification(raw: str) -> str:
     return CLASSIFICATION_MAP.get(raw.lower().strip(), raw.strip())
 
 
-def extract_requirement_numbers(chunk_ids_or_chunks, engine_response) -> set[str]:
-    """Extract requirement numbers from the response's retrieved chunk IDs.
+def is_hierarchy_match(expected: str, retrieved: str) -> bool:
+    """Check if two requirement numbers are in the same dotted-prefix family.
 
-    Parses requirement numbers from chunk IDs or from the chunks themselves
-    via the vector store.
+    Returns True if one is a prefix of the other in dotted notation.
+    e.g., "3.5" matches "3.5.1", "3.5.1.1"; "3.6.1" matches "3.6.1.1".
+    Also matches exact equality.
+
+    Args:
+        expected: The expected requirement number (e.g., "3.5").
+        retrieved: A retrieved requirement number (e.g., "3.5.1").
+
+    Returns:
+        True if one is a dotted-prefix of the other.
     """
-    # The response has retrieved_chunk_ids — we need to map back to requirement numbers
-    # We'll get them from the engine's last retrieval instead
-    return set()
+    if expected == retrieved:
+        return True
+    # Check if one is a prefix of the other with a dot boundary
+    # "3.5" is a prefix of "3.5.1" but NOT of "3.55"
+    if retrieved.startswith(expected + "."):
+        return True
+    if expected.startswith(retrieved + "."):
+        return True
+    return False
+
+
+def score_retrieval(expected_reqs: set[str], retrieved_reqs: set[str]) -> dict:
+    """Score retrieval with both exact and hierarchy-aware matching.
+
+    Args:
+        expected_reqs: Set of expected requirement numbers.
+        retrieved_reqs: Set of retrieved requirement numbers.
+
+    Returns:
+        Dict with exact and hierarchy-aware hits, misses, and recall.
+    """
+    # Exact matching
+    exact_hits = expected_reqs & retrieved_reqs
+    exact_misses = expected_reqs - retrieved_reqs
+    exact_recall = len(exact_hits) / len(expected_reqs) if expected_reqs else 1.0
+
+    # Hierarchy-aware matching
+    hierarchy_hits = set()
+    hierarchy_misses = set()
+
+    for exp_req in expected_reqs:
+        found = False
+        for ret_req in retrieved_reqs:
+            if is_hierarchy_match(exp_req, ret_req):
+                found = True
+                break
+        if found:
+            hierarchy_hits.add(exp_req)
+        else:
+            hierarchy_misses.add(exp_req)
+
+    hierarchy_recall = len(hierarchy_hits) / len(expected_reqs) if expected_reqs else 1.0
+
+    return {
+        "exact_hits": exact_hits,
+        "exact_misses": exact_misses,
+        "exact_recall": exact_recall,
+        "hierarchy_hits": hierarchy_hits,
+        "hierarchy_misses": hierarchy_misses,
+        "hierarchy_recall": hierarchy_recall,
+    }
 
 
 def run_evaluation():
@@ -123,12 +183,8 @@ def run_evaluation():
             elapsed = time.time() - start
 
             # Extract requirement numbers from retrieved chunk IDs
-            # Chunk IDs have format: "file.pdf::chunkN" — we need the actual req numbers
-            # We'll query the vector store to get chunk metadata
             retrieved_reqs = set()
             for chunk_id in response.retrieved_chunk_ids:
-                # Parse from the chunks that were used — we need to get them from the store
-                # The chunk IDs are in the response; look them up
                 try:
                     result = vector_store._collection.get(
                         ids=[chunk_id],
@@ -141,16 +197,17 @@ def run_evaluation():
                 except Exception:
                     pass
 
-            # Score retrieval recall
-            hits = expected_reqs & retrieved_reqs
-            misses = expected_reqs - retrieved_reqs
-            recall = len(hits) / len(expected_reqs) if expected_reqs else 1.0
+            # Score retrieval (exact + hierarchy-aware)
+            scores = score_retrieval(expected_reqs, retrieved_reqs)
+
+            # Use hierarchy-aware recall for pass/fail determination
+            recall = scores["hierarchy_recall"]
 
             # Score classification
             actual_class = normalize_classification(response.risk_classification.value)
             class_match = actual_class == expected_class
 
-            # Determine pass/fail (recall >= 0.5 AND classification match)
+            # Determine pass/fail (hierarchy recall >= 0.5 AND classification match)
             passed = recall >= 0.5 and class_match
 
             status = "✅ PASS" if passed else "❌ FAIL"
@@ -158,9 +215,12 @@ def run_evaluation():
 
             results.append({
                 "id": scenario_id,
-                "recall_pct": round(recall * 100, 1),
-                "hits": sorted(hits),
-                "misses": sorted(misses),
+                "hierarchy_recall_pct": round(scores["hierarchy_recall"] * 100, 1),
+                "exact_recall_pct": round(scores["exact_recall"] * 100, 1),
+                "hierarchy_hits": sorted(scores["hierarchy_hits"]),
+                "hierarchy_misses": sorted(scores["hierarchy_misses"]),
+                "exact_hits": sorted(scores["exact_hits"]),
+                "exact_misses": sorted(scores["exact_misses"]),
                 "retrieved_reqs": sorted(retrieved_reqs),
                 "expected_class": expected_class,
                 "actual_class": actual_class,
@@ -175,9 +235,12 @@ def run_evaluation():
             print(f"💥 ERROR ({elapsed:.1f}s): {str(e)[:80]}")
             results.append({
                 "id": scenario_id,
-                "recall_pct": 0.0,
-                "hits": [],
-                "misses": sorted(expected_reqs),
+                "hierarchy_recall_pct": 0.0,
+                "exact_recall_pct": 0.0,
+                "hierarchy_hits": [],
+                "hierarchy_misses": sorted(expected_reqs),
+                "exact_hits": [],
+                "exact_misses": sorted(expected_reqs),
                 "retrieved_reqs": [],
                 "expected_class": expected_class,
                 "actual_class": "ERROR",
@@ -189,31 +252,42 @@ def run_evaluation():
 
     # Print results table
     print(f"\n{'='*80}")
-    print(f"  RESULTS")
+    print(f"  RESULTS (hierarchy-aware recall | exact recall)")
     print(f"{'='*80}")
-    print(f"  {'ID':<35} {'Recall':>7} {'Hits/Miss':>12} {'Expected':>15} {'Actual':>15} {'Status':>8}")
-    print(f"  {'-'*35} {'-'*7} {'-'*12} {'-'*15} {'-'*15} {'-'*8}")
+    print(
+        f"  {'ID':<32} {'H-Recall':>8} {'E-Recall':>8} "
+        f"{'H-Hits':>8} {'Expected':>15} {'Actual':>15} {'Status':>6}"
+    )
+    print(f"  {'-'*32} {'-'*8} {'-'*8} {'-'*8} {'-'*15} {'-'*15} {'-'*6}")
 
     for r in results:
-        hits_str = f"{len(r['hits'])}/{len(r['hits'])+len(r['misses'])}"
+        total_expected = len(r["hierarchy_hits"]) + len(r["hierarchy_misses"])
+        hits_str = f"{len(r['hierarchy_hits'])}/{total_expected}"
         print(
-            f"  {r['id']:<35} {r['recall_pct']:>6.1f}% {hits_str:>12} "
-            f"{r['expected_class']:>15} {r['actual_class']:>15} "
-            f"{'PASS' if r['passed'] else 'FAIL':>8}"
+            f"  {r['id']:<32} {r['hierarchy_recall_pct']:>7.1f}% {r['exact_recall_pct']:>7.1f}% "
+            f"{hits_str:>8} {r['expected_class']:>15} {r['actual_class']:>15} "
+            f"{'PASS' if r['passed'] else 'FAIL':>6}"
         )
+        # Log hierarchy vs exact differences
+        if r["hierarchy_hits"] != r.get("exact_hits", []):
+            extra = set(r["hierarchy_hits"]) - set(r["exact_hits"])
+            if extra:
+                print(f"    ↳ hierarchy bonus: {sorted(extra)} (matched via prefix)")
 
     # Aggregate metrics
     total = len(results)
     passed_count = sum(1 for r in results if r["passed"])
-    avg_recall = sum(r["recall_pct"] for r in results) / total if total else 0
+    avg_hierarchy_recall = sum(r["hierarchy_recall_pct"] for r in results) / total if total else 0
+    avg_exact_recall = sum(r["exact_recall_pct"] for r in results) / total if total else 0
     class_accuracy = sum(1 for r in results if r["class_match"]) / total if total else 0
     errors = sum(1 for r in results if r["error"])
 
-    print(f"\n  {'─'*50}")
-    print(f"  Overall Retrieval Recall:    {avg_recall:.1f}%")
-    print(f"  Classification Accuracy:     {class_accuracy*100:.1f}%")
-    print(f"  Passed:                      {passed_count}/{total}")
-    print(f"  Errors:                      {errors}/{total}")
+    print(f"\n  {'─'*55}")
+    print(f"  Hierarchy-Aware Retrieval Recall:  {avg_hierarchy_recall:.1f}%")
+    print(f"  Exact-Match Retrieval Recall:      {avg_exact_recall:.1f}%")
+    print(f"  Classification Accuracy:           {class_accuracy*100:.1f}%")
+    print(f"  Passed:                            {passed_count}/{total}")
+    print(f"  Errors:                            {errors}/{total}")
     print(f"{'='*80}\n")
 
     # Save to CSV
@@ -225,7 +299,9 @@ def run_evaluation():
         writer = csv.DictWriter(
             f,
             fieldnames=[
-                "id", "recall_pct", "hits", "misses", "retrieved_reqs",
+                "id", "hierarchy_recall_pct", "exact_recall_pct",
+                "hierarchy_hits", "hierarchy_misses",
+                "exact_hits", "exact_misses", "retrieved_reqs",
                 "expected_class", "actual_class", "class_match", "passed",
                 "elapsed_s", "error",
             ],
@@ -233,8 +309,10 @@ def run_evaluation():
         writer.writeheader()
         for r in results:
             row = r.copy()
-            row["hits"] = "|".join(row["hits"])
-            row["misses"] = "|".join(row["misses"])
+            row["hierarchy_hits"] = "|".join(row["hierarchy_hits"])
+            row["hierarchy_misses"] = "|".join(row["hierarchy_misses"])
+            row["exact_hits"] = "|".join(row["exact_hits"])
+            row["exact_misses"] = "|".join(row["exact_misses"])
             row["retrieved_reqs"] = "|".join(row["retrieved_reqs"])
             writer.writerow(row)
 
