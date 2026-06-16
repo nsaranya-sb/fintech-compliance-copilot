@@ -146,7 +146,7 @@ def get_rag_engine() -> RAGEngine:
 # --- Query endpoint ---
 
 # Timeout for RAG processing in seconds
-RAG_PROCESSING_TIMEOUT = 30
+RAG_PROCESSING_TIMEOUT = 120
 
 
 @router.post("/api/v1/compliance/query", response_model=ComplianceResponseSchema)

@@ -59,7 +59,7 @@ class RAGEngine:
         self,
         vector_store: ChromaVectorStore,
         embedding_service: EmbeddingService,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-sonnet-4-6",
         api_key: str | None = None,
         use_query_decomposition: bool = True,
     ):
@@ -168,6 +168,8 @@ class RAGEngine:
         chunks = self._vector_store.query(
             query_embedding=query_embedding, top_k=10, min_similarity=SIMILARITY_THRESHOLD
         )
+        # Drop front-matter/appendix/scope chunks with no requirement number
+        chunks = [rc for rc in chunks if rc.chunk.requirement_number]
         return chunks
 
     def _retrieve_with_decomposition(self, query: str) -> list[RetrievedChunk]:
@@ -221,7 +223,8 @@ class RAGEngine:
                 )
 
             # Take only top-3 from this sub-query for the merge pool
-            top_for_subquery = results[:TOP_PER_SUBQUERY]
+            # Skip chunks without a requirement number (front-matter/appendix/scope)
+            top_for_subquery = [rc for rc in results if rc.chunk.requirement_number][:TOP_PER_SUBQUERY]
             for rc in top_for_subquery:
                 chunk_id = rc.chunk.id
                 if chunk_id not in chunk_map or rc.similarity_score > chunk_map[chunk_id]["score"]:
@@ -278,18 +281,24 @@ class RAGEngine:
             List of focused compliance questions (1 to MAX_SUB_QUERIES items).
         """
         decomposition_prompt = (
-            "You are a PCI DSS compliance analyst. A user has described a system "
-            "architecture or compliance scenario. Your job is to decompose it into "
-            "focused, self-contained compliance questions that can each be searched "
-            "independently against a PCI DSS document corpus.\n\n"
-            "Rules:\n"
-            "- Output a JSON array of strings, each being one focused question.\n"
-            "- Maximum 5 questions.\n"
-            "- Each question should target a specific PCI DSS concern "
-            "(e.g., data storage, encryption, access control, logging, network segmentation).\n"
-            "- Each question must be self-contained — understandable without the others.\n"
-            "- If the scenario is simple and covers only one concern, return an array with one item.\n"
-            "- Output ONLY the JSON array, no explanation.\n\n"
+            "You are a PCI DSS compliance analyst. Decompose the following scenario "
+            "into focused retrieval queries for searching a PCI DSS regulatory corpus.\n\n"
+            "RULES — each sub-query MUST be:\n"
+            "- Under 12 words.\n"
+            "- About exactly ONE compliance concept (storage, encryption, access, etc.).\n"
+            "- Phrased as a direct permissibility or requirement question.\n"
+            "- Free of incidental context words from the scenario (e.g., don't repeat "
+            "'logging', 'microservice', 'EBS volume' — extract the underlying regulatory issue).\n"
+            "- Maximum 5 sub-queries.\n"
+            "- If the scenario covers only one concern, return one item.\n\n"
+            "EXAMPLE:\n"
+            "Scenario: \"We log full card numbers including CVV to unencrypted debug logs "
+            "accessible by all engineers.\"\n"
+            "Output:\n"
+            '["Is storing the card verification code after authorization permitted?", '
+            '"Must stored cardholder data be encrypted at rest?", '
+            '"Who may access systems storing cardholder data?"]\n\n'
+            "Output ONLY the JSON array, no explanation.\n\n"
             f"Scenario:\n{scenario}"
         )
 
@@ -608,13 +617,17 @@ class RAGEngine:
         )
 
     def _detect_conflicts(self, chunks: list[RetrievedChunk]) -> bool:
-        """Detect potential conflicts between retrieved chunks.
+        """Detect genuine conflicts between retrieved chunks from DIFFERENT requirements.
 
-        Checks if chunks reference the same requirement number but come from
-        different sections or source files, which may indicate conflicting guidance.
+        Chunks from the same requirement number (even with different section headings
+        like "Defined Approach Requirements" vs "Testing Procedures") are complementary
+        parts of one requirement and are never treated as conflicting.
 
-        A simple heuristic: if multiple chunks reference the same requirement
-        number but have different section headings, flag as potential conflict.
+        A conflict is only flagged when chunks from different requirement numbers
+        address the same topic but provide opposing guidance — detected when multiple
+        distinct major requirement groups (e.g., Req 3 vs Req 7) are present and
+        their source files differ, suggesting potentially contradictory regulatory
+        directions on the same subject.
 
         Args:
             chunks: List of retrieved chunks to check for conflicts.
@@ -625,28 +638,46 @@ class RAGEngine:
         if len(chunks) < 2:
             return False
 
-        # Group chunks by requirement number
-        req_sections: dict[str, set[str]] = {}
+        # Group chunks by their requirement number
+        req_groups: dict[str, list[RetrievedChunk]] = {}
         for rc in chunks:
             req_num = rc.chunk.requirement_number
             if req_num:
-                section = rc.chunk.section_heading or ""
-                if req_num not in req_sections:
-                    req_sections[req_num] = set()
-                req_sections[req_num].add(section)
+                if req_num not in req_groups:
+                    req_groups[req_num] = []
+                req_groups[req_num].append(rc)
 
-        # If any requirement has chunks from multiple different sections,
-        # it might indicate conflicting guidance
-        for req_num, sections in req_sections.items():
-            # Filter out empty sections and check if there are truly different sections
-            non_empty_sections = {s for s in sections if s}
-            if len(non_empty_sections) > 1:
-                logger.info(
-                    "Potential conflict detected for Requirement %s across sections: %s",
-                    req_num,
-                    non_empty_sections,
-                )
-                return True
+        # Only consider conflicts BETWEEN different requirement numbers.
+        # Multiple sections within the same requirement are complementary, not conflicting.
+        # A genuine conflict: different requirement numbers from different source files
+        # addressing the same query (which means the retrieval pulled opposing guidance).
+        unique_requirements = list(req_groups.keys())
+        if len(unique_requirements) < 2:
+            return False
+
+        # Check if different requirements come from different source documents,
+        # which could indicate genuinely conflicting guidance across standard versions
+        source_files_per_req: dict[str, set[str]] = {}
+        for req_num, rcs in req_groups.items():
+            source_files_per_req[req_num] = {rc.chunk.source_file for rc in rcs}
+
+        # Conflict: same source file has different requirements that were retrieved
+        # This is normal (a query can span multiple requirements) — NOT a conflict.
+        # Real conflict: different source files giving different requirement numbers
+        # on the same topic (e.g., v4.0 says X, v4.0.1 says Y)
+        all_sources = set()
+        for sources in source_files_per_req.values():
+            all_sources.update(sources)
+
+        if len(all_sources) > 1:
+            # Multiple source documents with different requirements — potential conflict
+            logger.info(
+                "Potential conflict: chunks from %d different requirements across %d source files: %s",
+                len(unique_requirements),
+                len(all_sources),
+                {req: list(srcs) for req, srcs in source_files_per_req.items()},
+            )
+            return True
 
         return False
 

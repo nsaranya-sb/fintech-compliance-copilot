@@ -17,7 +17,7 @@ import streamlit as st
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
 QUERY_ENDPOINT = f"{BACKEND_URL}/api/v1/compliance/query"
 AUTH_TOKEN = os.environ.get("AUTH_TOKEN", "")
-REQUEST_TIMEOUT_SECONDS = 60
+REQUEST_TIMEOUT_SECONDS = 120
 
 DEFAULT_QUERY = """\
 Our payments microservice temporarily logs full credit card numbers \
