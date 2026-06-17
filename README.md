@@ -6,12 +6,26 @@ Describe a system in plain English — *"we log full card numbers including CVV 
 
 > Built as a hands-on study in AI product development: an agentic-coded RAG system where the interesting engineering is in retrieval quality and evaluation, not the UI. Not validated for production compliance use.
 
+**Product Management Case Study:** This repository serves as an end-to-end blueprint in AI Product Development, focusing heavily on minimizing time-to-value (TTV), implementing rigorous LLMOps evaluation harnesses, and mitigating hallucination risks within highly regulated domains.
+
+---
+
+## 💼 Business Context & Product Strategy
+In fast-moving fintech organizations, product feature velocity is frequently bottlenecked by manual compliance and security reviews, which can take weeks per sprint. This application acts as a defensive guardrail for product managers and architects, allowing them to instantly discover compliance violations *before* writing a single line of code.
+
+### Core Product Guardrails:
+1. **Zero-Hallucination Mandate:** The model is strictly prohibited from utilising its parametric pre-trained data to answer queries. If an explicit rule is missing from the underlying vector database, the application drops a programmatic fallback warning.
+2. **Asymmetrical Risk Optimization:** In compliance, saying a violation is "Compliant" can result in regulatory shutdowns. The system's prompt architecture is explicitly weighted to favour conservative warnings over false compliance confirmations.
+
 ---
 
 ## What it does
 - Accepts a natural-language architecture / payment-flow / feature description.
 - Decomposes it into focused compliance sub-questions, retrieves the relevant PCI DSS v4.0.1 requirement passages, and generates an assessment **grounded in and cited to** the source standard.
 - Returns: **risk classification** (Compliant / Warning / Non-Compliant), **assessment**, **citations** to specific requirements, and a **grounding-confidence** indicator.
+
+## 🧱 Technical System Architecture
+The application leverages a decoupled, API-first design lifecycle to support scalability and omnichannel access (e.g., integrating into Streamlit dashboards, internal CLIs, or CI/CD build pipelines).
 
 ## Architecture
 ```
