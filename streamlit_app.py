@@ -194,12 +194,16 @@ if st.session_state.last_result is not None:
     col_risk, col_confidence = st.columns([3, 1])
     
     with col_risk:
-        risk_str = str(res.risk_classification)
-        if "Non-Compliant" in risk_str:
+        # Safely extract the string value and name of the enum to handle Pydantic/Python serialization differences
+        risk_val = getattr(res.risk_classification, "value", str(res.risk_classification))
+        risk_name = getattr(res.risk_classification, "name", "")
+        
+        # Check both lowercased value and name for status matching
+        if "non_compliant" in risk_name.lower() or "non-compliant" in risk_val.lower():
             bg_color = "rgba(239, 68, 68, 0.12)"
             border_color = "rgba(239, 68, 68, 0.3)"
             text_color = "#fca5a5"
-        elif "Warning" in risk_str:
+        elif "warning" in risk_name.lower() or "warning" in risk_val.lower():
             bg_color = "rgba(245, 158, 11, 0.12)"
             border_color = "rgba(245, 158, 11, 0.3)"
             text_color = "#fde047"
@@ -213,7 +217,7 @@ if st.session_state.last_result is not None:
             <div style="background-color: {bg_color}; border: 1px solid {border_color}; 
                         padding: 12px 18px; border-radius: 8px; font-weight: bold; 
                         color: {text_color}; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
-                Risk Status: {risk_str}
+                Risk Status: {risk_val}
             </div>
             """,
             unsafe_allow_html=True
