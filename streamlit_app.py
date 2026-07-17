@@ -10,6 +10,14 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
+# Page configuration must be the first Streamlit command
+st.set_page_config(
+    page_title="Fintech RegTech Compliance Copilot",
+    page_icon="🏛️",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
 # Load environment variables
 load_dotenv(override=True)
 
@@ -82,13 +90,6 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # Page configuration and Styling
 # ---------------------------------------------------------------------------
-
-st.set_page_config(
-    page_title="Fintech RegTech Compliance Copilot",
-    page_icon="🏛️",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
 
 st.markdown(
     """
