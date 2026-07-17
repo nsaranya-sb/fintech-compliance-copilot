@@ -217,8 +217,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Vector database storage
-data/vectordb/
+# Vector database storage (unignored to allow Streamlit Cloud pre-built index deployment)
+# data/vectordb/
 
 # Pipeline state
 data/pipeline_state.json
