@@ -69,6 +69,30 @@ streamlit run src/app.py
 ```
 > Secrets live in `.env` (gitignored). A model ID is configurable — Anthropic retires older models on a schedule, so pin a current one (see `GET /v1/models`).
 
+## Streamlit Cloud / Single-Process Deployment
+
+For a simple single-process deployment (such as deploying directly to **Streamlit Cloud**), use the entry point [streamlit_app.py](file:///Users/saranyaneelakantan/codebase/fintech-compliance-copilot/streamlit_app.py) located at the root of the repository. This entry point imports the Python RAG engine directly and executes queries in-process, bypassing the FastAPI backend entirely.
+
+### How to deploy:
+
+1. **Commit the pre-built index:**
+   Since the vector database is ignored by default in `.gitignore`, you must force-commit the pre-built database file to Git so it is deployed with the app:
+   ```bash
+   git add -f data/vectordb/chroma.sqlite3
+   git commit -m "Include pre-built vector database"
+   ```
+2. **Configure Streamlit Secrets:**
+   In your Streamlit Cloud app settings dashboard, add your API keys under **Secrets**:
+   ```toml
+   ANTHROPIC_API_KEY = "your-anthropic-api-key"
+   OPENAI_API_KEY = "your-openai-api-key"
+   ```
+3. **Deployment Settings:**
+   Deploy the repository and set the main entry file path to `streamlit_app.py`.
+4. **Session Limits:**
+   To prevent excessive API cost, each user session is capped at a maximum of **3 queries**.
+
+
 ## API
 ```bash
 curl -X POST "http://127.0.0.1:8000/api/v1/compliance/query" \

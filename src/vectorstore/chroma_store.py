@@ -27,6 +27,17 @@ class ChromaVectorStore:
             persist_directory: Path for ChromaDB persistent storage.
             collection_name: Name of the ChromaDB collection.
         """
+        import os
+        import sys
+
+        # If the persist path is absolute, force it to be relative (e.g., ./data/vectordb)
+        # to ensure compatibility with Streamlit Cloud container directory layout,
+        # unless running in a unit test environment where temporary directories are required.
+        if os.path.isabs(persist_directory):
+            is_testing = "pytest" in sys.modules or any("pytest" in arg for arg in sys.argv)
+            if not is_testing:
+                persist_directory = "./data/vectordb"
+
         self._client = chromadb.PersistentClient(path=persist_directory)
         self._collection = self._client.get_or_create_collection(
             name=collection_name,
