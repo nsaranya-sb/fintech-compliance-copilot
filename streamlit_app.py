@@ -53,6 +53,33 @@ def get_rag_engine():
     return rag_engine
 
 # ---------------------------------------------------------------------------
+# Diagnostics Sidebar
+# ---------------------------------------------------------------------------
+
+with st.sidebar:
+    st.subheader("🔍 System Diagnostics")
+    settings = get_settings()
+    db_path = settings.VECTORDB_PATH
+    abs_db_path = os.path.abspath(db_path)
+    
+    st.write(f"**Current CWD:** `{os.getcwd()}`")
+    st.write(f"**DB Path Config:** `{db_path}`")
+    st.write(f"**DB Path Absolute:** `{abs_db_path}`")
+    st.write(f"**DB Path Exists:** `{os.path.exists(abs_db_path)}`")
+    
+    try:
+        vs = ChromaVectorStore(
+            persist_directory=db_path,
+            collection_name=settings.COLLECTION_NAME,
+        )
+        count = vs._collection.count()
+        st.write(f"**Chroma Chunks Count:** `{count}`")
+    except Exception as e:
+        st.write(f"**Chroma Error:** `{e}`")
+        
+    st.divider()
+
+# ---------------------------------------------------------------------------
 # Page configuration and Styling
 # ---------------------------------------------------------------------------
 
