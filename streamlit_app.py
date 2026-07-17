@@ -252,10 +252,14 @@ if st.session_state.last_result is not None:
         )
         
     with col_confidence:
-        confidence_str = str(res.grounding_confidence)
-        if "High" in confidence_str:
+        # Safely extract the string value and name of the enum to handle serialization differences
+        confidence_val = getattr(res.grounding_confidence, "value", str(res.grounding_confidence))
+        confidence_name = getattr(res.grounding_confidence, "name", "")
+        
+        # Match color based on the lowercased name or value
+        if "high" in confidence_name.lower() or "high" in confidence_val.lower():
             conf_color = "#10b981"
-        elif "Medium" in confidence_str:
+        elif "medium" in confidence_name.lower() or "medium" in confidence_val.lower():
             conf_color = "#f59e0b"
         else:
             conf_color = "#ef4444"
@@ -265,7 +269,7 @@ if st.session_state.last_result is not None:
             <div style="text-align: center; border: 1px solid rgba(255, 255, 255, 0.1); 
                         padding: 12px; border-radius: 8px; background-color: rgba(255, 255, 255, 0.02);">
                 <div style="font-size: 0.72rem; text-transform: uppercase; color: #a1a1aa; letter-spacing: 0.05em;">Grounding Confidence</div>
-                <div style="font-weight: bold; color: {conf_color}; font-size: 1.1rem;">{confidence_str}</div>
+                <div style="font-weight: bold; color: {conf_color}; font-size: 1.1rem;">{confidence_val}</div>
             </div>
             """,
             unsafe_allow_html=True
