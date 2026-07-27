@@ -29,12 +29,16 @@ The application leverages a decoupled, API-first design lifecycle to support sca
 
 ## Architecture
 ```
+Decoupled Multi-Process (API-First):
 Streamlit UI  ──HTTP──▶  FastAPI (auth)  ──▶  RAG engine
                                               ├─ query decomposition (Claude)
                                               ├─ embeddings (OpenAI text-embedding-3-small)
                                               ├─ retrieval (ChromaDB, cosine)
                                               ├─ merge (top-k per sub-query)
                                               └─ assessment + citations (Claude)
+
+Single-Process (Streamlit Cloud):
+Streamlit UI (`streamlit_app.py`) ──Direct Python Call──▶ RAG engine
 ```
 
 **Key design choices**
@@ -58,14 +62,15 @@ cp .env.example .env
 #   AUTH_TOKEN=...            # bearer token for the API
 #   BACKEND_URL=http://127.0.0.1:8000   # used by the Streamlit frontend
 
-# 3. Ingest the corpus (PCI DSS v4.0.1 PDF in data/raw/)
-python3 -m src.pipeline     # builds the Chroma index
+# 3. Ingest the corpus (Optional — pre-built Chroma index is committed in data/vectordb/)
+python3 -m src.pipeline     # rebuilds the Chroma index from data/raw/
 
-# 4. Run the backend
+# 4. Option A: Run decoupled multi-process (Backend + Frontend)
 python3 -m uvicorn src.main:app --reload
+streamlit run src/app.py    # in a separate terminal
 
-# 5. Run the frontend (separate terminal)
-streamlit run src/app.py
+# 5. Option B: Run single-process directly (In-process RAG engine)
+streamlit run streamlit_app.py
 ```
 > Secrets live in `.env` (gitignored). A model ID is configurable — Anthropic retires older models on a schedule, so pin a current one (see `GET /v1/models`).
 
@@ -75,12 +80,8 @@ For a simple single-process deployment (such as deploying directly to **Streamli
 
 ### How to deploy:
 
-1. **Commit the pre-built index:**
-   Since the vector database is ignored by default in `.gitignore`, you must force-commit the pre-built database file to Git so it is deployed with the app:
-   ```bash
-   git add -f data/vectordb/chroma.sqlite3
-   git commit -m "Include pre-built vector database"
-   ```
+1. **Pre-built Vector Database:**
+   The pre-built vector database (`data/vectordb/`) is unignored in `.gitignore` and tracked directly in Git, so it deploys out-of-the-box without extra build or force-commit steps.
 2. **Configure Streamlit Secrets:**
    In your Streamlit Cloud app settings dashboard, add your API keys under **Secrets**:
    ```toml
@@ -89,7 +90,9 @@ For a simple single-process deployment (such as deploying directly to **Streamli
    ```
 3. **Deployment Settings:**
    Deploy the repository and set the main entry file path to `streamlit_app.py`.
-4. **Session Limits:**
+4. **System Diagnostics Sidebar:**
+   `streamlit_app.py` includes a built-in sidebar displaying environment paths, working directory, vector database existence, and live Chroma chunk counts to verify loading status in production.
+5. **Session Limits:**
    To prevent excessive API cost, each user session is capped at a maximum of **3 queries**.
 
 
