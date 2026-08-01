@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Retrieval configuration
     USE_QUERY_DECOMPOSITION: bool = True
 
+    # Debug / Diagnostics configuration
+    SHOW_DEBUG_SIDEBAR: bool = False
+
     # Documents directory for ingestion
     DOCUMENTS_DIR: str = "./data/raw"
 

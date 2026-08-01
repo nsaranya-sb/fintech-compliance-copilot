@@ -61,31 +61,38 @@ def get_rag_engine():
     return rag_engine
 
 # ---------------------------------------------------------------------------
-# Diagnostics Sidebar
+# Diagnostics Sidebar (Hidden behind feature flag)
 # ---------------------------------------------------------------------------
 
-with st.sidebar:
-    st.subheader("🔍 System Diagnostics")
-    settings = get_settings()
-    db_path = settings.VECTORDB_PATH
-    abs_db_path = os.path.abspath(db_path)
-    
-    st.write(f"**Current CWD:** `{os.getcwd()}`")
-    st.write(f"**DB Path Config:** `{db_path}`")
-    st.write(f"**DB Path Absolute:** `{abs_db_path}`")
-    st.write(f"**DB Path Exists:** `{os.path.exists(abs_db_path)}`")
-    
-    try:
-        vs = ChromaVectorStore(
-            persist_directory=db_path,
-            collection_name=settings.COLLECTION_NAME,
-        )
-        count = vs._collection.count()
-        st.write(f"**Chroma Chunks Count:** `{count}`")
-    except Exception as e:
-        st.write(f"**Chroma Error:** `{e}`")
+settings = get_settings()
+show_debug_sidebar = (
+    settings.SHOW_DEBUG_SIDEBAR
+    or os.environ.get("SHOW_DEBUG_SIDEBAR", "").lower() in ("true", "1", "yes")
+    or st.query_params.get("debug", "").lower() in ("true", "1", "yes")
+)
+
+if show_debug_sidebar:
+    with st.sidebar:
+        st.subheader("🔍 System Diagnostics")
+        db_path = settings.VECTORDB_PATH
+        abs_db_path = os.path.abspath(db_path)
         
-    st.divider()
+        st.write(f"**Current CWD:** `{os.getcwd()}`")
+        st.write(f"**DB Path Config:** `{db_path}`")
+        st.write(f"**DB Path Absolute:** `{abs_db_path}`")
+        st.write(f"**DB Path Exists:** `{os.path.exists(abs_db_path)}`")
+        
+        try:
+            vs = ChromaVectorStore(
+                persist_directory=db_path,
+                collection_name=settings.COLLECTION_NAME,
+            )
+            count = vs._collection.count()
+            st.write(f"**Chroma Chunks Count:** `{count}`")
+        except Exception as e:
+            st.write(f"**Chroma Error:** `{e}`")
+            
+        st.divider()
 
 # ---------------------------------------------------------------------------
 # Page configuration and Styling

@@ -91,7 +91,7 @@ For a simple single-process deployment (such as deploying directly to **Streamli
 3. **Deployment Settings:**
    Deploy the repository and set the main entry file path to `streamlit_app.py`.
 4. **System Diagnostics Sidebar:**
-   `streamlit_app.py` includes a built-in sidebar displaying environment paths, working directory, vector database existence, and live Chroma chunk counts to verify loading status in production.
+   `streamlit_app.py` includes a built-in diagnostics sidebar displaying environment paths, working directory, vector database existence, and live Chroma chunk counts. This is hidden by default and can be enabled by setting environment variable `SHOW_DEBUG_SIDEBAR=true` or passing `?debug=true` in the app URL.
 5. **Session Limits:**
    To prevent excessive API cost, each user session is capped at a maximum of **3 queries**.
 
